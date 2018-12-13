@@ -1,0 +1,18 @@
+kind: "BuildConfig"
+apiVersion: "v1"
+metadata:
+  name: "nationalparks-pipeline"
+spec:
+  source:
+    git:
+      uri: "https://github.com/bcampoli/redhat-homework.git"
+  strategy:
+    jenkinsPipelineStrategy:
+      env:
+         - name: GUID
+           value: ${GUID}
+         - name: CLUSTER
+           value: ${CLUSTER}
+         - name: REPO
+           value: ${REPO}
+      jenkinsfilePath: Nationalparks/Jenkinsfile

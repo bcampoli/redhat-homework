@@ -31,7 +31,7 @@ echo "Setting up Nexus in project $GUID-nexus"
 # To be Implemented by Student
 
 oc project ${GUID}-nexus
-oc new-app -f ../templates/nexus3-persistent.yaml
+oc new-app -f ./Infrastructure/templates/nexus3-persistent.yaml
 
 echo -n "Checking if Nexus is Ready..."
 while : ; do

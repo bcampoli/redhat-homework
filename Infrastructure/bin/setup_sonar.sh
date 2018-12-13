@@ -21,4 +21,4 @@ oc policy add-role-to-user edit system:serviceaccount:gpte-jenkins:jenkins -n ${
 
 # Code to set up the SonarQube project.
 # Ideally just calls a template
-oc new-app -f ../templates/sonar_template.yaml -p GUID=${GUID} -n ${GUID}-sonarqube
+oc new-app -f ./Infrastructure/templates/sonar_template.yaml -p GUID=${GUID} -n ${GUID}-sonarqube

@@ -27,7 +27,7 @@ echo "Setting up Jenkins in project ${GUID}-jenkins from Git Repo ${REPO} for Cl
 # * CLUSTER: the base url of the cluster used (e.g. na39.openshift.opentlc.com)
 
 # To be Implemented by Student
-oc new-app -f ./Infrastructure/templates/jenkins.json \
+oc new-app -f ./Infrastructure/templates/jenkins-template.json \
   --param ENABLE_OAUTH=true \
   --param MEMORY_LIMIT=2Gi \
   --param CPU_LIMIT=2 \
