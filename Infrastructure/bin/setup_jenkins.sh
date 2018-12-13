@@ -27,3 +27,34 @@ echo "Setting up Jenkins in project ${GUID}-jenkins from Git Repo ${REPO} for Cl
 # * CLUSTER: the base url of the cluster used (e.g. na39.openshift.opentlc.com)
 
 # To be Implemented by Student
+oc new-app -f ./Infrastructure/templates/jenkins.json \
+  --param ENABLE_OAUTH=true \
+  --param MEMORY_LIMIT=2Gi \
+  --param CPU_LIMIT=2 \
+  --param VOLUME_CAPACITY=4Gi \
+  -n "${GUID}-jenkins"
+
+oc patch dc/jenkins \
+  -p "{\"spec\":{\"strategy\":{\"recreateParams\":{\"timeoutSeconds\":1200}}}}" \
+  -n "${GUID}-jenkins"
+
+
+oc create imagestream jenkins-slave-appdev -n "${GUID}-jenkins"
+oc create -f "${TEMPLATES_PATH:-./Infrastructure/templates}"/BuildConfig_Skopeo -n "${GUID}-jenkins"
+oc start-build skopeo-build -n "${GUID}-jenkins"
+
+
+
+#Parksmap pipeline BuildConfig
+oc create -f ./Infrastructure/templates/parksmap-pipeline.yaml -n ${GUID}-jenkins
+
+#MLBPark pipeline BuildConfig
+oc create -f ./Infrastructure/templates/mlbparks-pipeline.yaml -n ${GUID}-jenkins
+
+#NationalParks pipeline BuildConfig
+oc create -f ./Infrastructure/templates/nationalparks-pipeline.yaml -n ${GUID}-jenkins
+
+
+oc set env bc/mlbparks-pipeline GUID=${GUID} REPO=${REPO} CLUSTER=${CLUSTER} -n ${GUID}-jenkins
+oc set env bc/nationalparks-pipeline GUID=${GUID} REPO=${REPO} CLUSTER=${CLUSTER} -n ${GUID}-jenkins
+oc set env bc/parksmap-pipeline GUID=${GUID} REPO=${REPO} CLUSTER=${CLUSTER} -n ${GUID}-jenkins

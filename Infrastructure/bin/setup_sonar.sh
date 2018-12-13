@@ -14,3 +14,11 @@ echo "Setting up Sonarqube in project $GUID-sonarqube"
 # oc new-app -f ../templates/sonarqube.yaml --param .....
 
 # To be Implemented by Student
+oc project ${GUID}-sonarqube
+oc policy add-role-to-user admin system:serviceaccount:gpte-jenkins:jenkins -n ${GUID}-sonarqube
+oc policy add-role-to-user view system:serviceaccount:gpte-jenkins:jenkins -n ${GUID}-sonarqube
+oc policy add-role-to-user edit system:serviceaccount:gpte-jenkins:jenkins -n ${GUID}-sonarqube
+
+# Code to set up the SonarQube project.
+# Ideally just calls a template
+oc new-app -f ../templates/sonar_template.yaml -p GUID=${GUID} -n ${GUID}-sonarqube

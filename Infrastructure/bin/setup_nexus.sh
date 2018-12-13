@@ -29,3 +29,27 @@ echo "Setting up Nexus in project $GUID-nexus"
 # oc new-app -f ../templates/nexus.yaml --param .....
 
 # To be Implemented by Student
+
+oc project ${GUID}-nexus
+oc new-app -f ../templates/nexus3-persistent.yaml
+
+echo -n "Checking if Nexus is Ready..."
+while : ; do
+  oc get pod -n ${GUID}-nexus | grep -v deploy|grep "1/1"
+  [[ "$?" == "1" ]] || break
+  echo -n "."
+  sleep 10
+done
+
+echo -n "Configuring Nexus"
+
+curl -o setup_nexus3.sh -s https://raw.githubusercontent.com/wkulhanek/ocp_advanced_development_resources/master/nexus/setup_nexus3.sh
+chmod +x setup_nexus3.sh
+./setup_nexus3.sh admin admin123 http://$(oc get route nexus3 --template='{{ .spec.host }}' -n "${GUID}-nexus")
+rm setup_nexus3.sh
+
+echo -n "Configuring Nexus Service and Route"
+
+oc expose dc nexus3 --port=5000 --name=nexus-registry -n "${GUID}-nexus"
+oc create route edge nexus-registry --service=nexus-registry --port=5000 -n "${GUID}-nexus"
+
