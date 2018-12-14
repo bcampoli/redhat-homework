@@ -20,29 +20,29 @@ podTemplate(
     // You need to build the application in directory `MLBParks`.
     // Also copy "../nexus_settings.xml" to your build directory
     // and replace 'GUID' in the file with your ${GUID} to point to >your< Nexus instance
-    stages {
-      stage ('Get Source Code Repo'){
-        echo "cloning repo"
-        git '${REPO}'
-      }
-
-      def mvnCmd = "mvn -s ./nexus_settings.xml"
-      def groupId = getGroupIdFromPom("./${appname}/pom.xml")
-      def artifactId = getArtifactIdFromPom("./${appname}/pom.xml")
-      def version = getVersionFromPom("./${appname}/pom.xml")
-      def devTag = "${version}-${BUILD_NUMBER}"
-      def prodTag = "${version}"
-
-      stage ('Build Artifact'){
-        echo "Building java war version"
-        sh "${mvnCmd} -f ./${appname}/pom.xml -DskipTests clean package"
-      }
-
-
-
-
-
+   
+    stage ('Get Source Code Repo'){
+      echo "cloning repo"
+      git '${REPO}'
     }
+
+    def mvnCmd = "mvn -s ./nexus_settings.xml"
+    def groupId = getGroupIdFromPom("./${appname}/pom.xml")
+    def artifactId = getArtifactIdFromPom("./${appname}/pom.xml")
+    def version = getVersionFromPom("./${appname}/pom.xml")
+    def devTag = "${version}-${BUILD_NUMBER}"
+    def prodTag = "${version}"
+
+    stage ('Build Artifact'){
+      echo "Building java war version"
+      sh "${mvnCmd} -f ./${appname}/pom.xml -DskipTests clean package"
+    }
+
+
+
+
+
+    
  
   }
 }
