@@ -8,19 +8,132 @@ podTemplate(
       name: "jnlp",
       image: "docker-registry.default.svc:5000/${GUID}-jenkins/jenkins-slave-appdev",
       resourceRequestMemory: "1Gi",
-      resourceLimitMemory: "2Gi"
+      resourceLimitMemory: "2Gi",
+      resourceRequestCpu: "500m",
+      resourceLimitCpu: "1"
     )
   ]
 ) {
   node('skopeo-pod') {
     echo "GUID: ${GUID}"
     echo "CLUSTER: ${CLUSTER}"
-
+    def appname = "ParksMap"
     // Your Pipeline Code goes here. Make sure to use the ${GUID} and ${CLUSTER} parameters where appropriate
     // You need to build the application in directory `ParksMap`.
     // Also copy "../nexus_settings.xml" to your build directory
     // and replace 'GUID' in the file with your ${GUID} to point to >your< Nexus instance
+   
+    stage ('Get Source Code Repo'){
+      echo "cloning repo"
+      git '${REPO}'
+    }
 
+    def mvnCmd = "mvn -s ./nexus_settings.xml"
+    def groupId = getGroupIdFromPom("./${appname}/pom.xml")
+    def artifactId = getArtifactIdFromPom("./${appname}/pom.xml")
+    def version = getVersionFromPom("./${appname}/pom.xml")
+    def devTag = "${version}-${BUILD_NUMBER}"
+    def prodTag = "${version}"
+    def deploymentName = "parksmap"
+    def artifactPath = "./ParksMap/target/parksmap.jar"
+    def devNamespace = "${GUID}-parks-dev"
+    def prodNamespace = "${GUID}-parks-prod"
+    def healthCheckEndpoint = "/ws/healthz/"
+    def serviceUrl = "http://parksmap-${GUID}-parks-dev.apps.${CLUSTER}"
+  
+
+    stage ('Build Artifact'){
+      echo "Building java artifact"
+      sh "${mvnCmd} -f ./${appname}/pom.xml clean package spring-boot:repackage -DskipTests -Dcom.redhat.xpaas.repo.redhatga"
+    }
+
+
+    stage('Unit Tests') {
+      echo "${appname} unit tests"
+      sh "${mvnCmd} -f ./${appname}/pom.xml test"
+    }
+
+    stage('Sonar Code Analysis') {
+      echo "Start Code Analysis for ${appname}"
+      sh "${mvnCmd} -f ./${appname}/pom.xml sonar:sonar -Dsonar.host.url=http://sonarqube-${GUID}-sonarqube.apps.${CLUSTER} -Dsonar.projectName=${JOB_BASE_NAME}-${devTag}"
+    }
+
+    stage('Publishing to Nexus') {
+      echo "Publishing to nexus"
+      sh "${mvnCmd} -f ./${appname}/pom.xml deploy -DskipTests=true -DaltDeploymentRepository=nexus::default::http://nexus3-${GUID}-nexus.apps.${CLUSTER}/repository/releases"
+    }
+
+    stage('Build container image') {
+    echo "Building container image ${appname}:0.0-0"
+    sh "oc start-build ${deploymentName} --follow --from-file=${artifactPath} -n ${devNamespace}"
+    openshiftTag alias: "false", destStream: "${deploymentName}", destTag: devTag, destinationNamespace: "${devNamespace}", namespace: "${devNamespace}", srcStream: "${deploymentName}", srcTag: 'latest', verbose: 'false'
+    }
+
+    stage('Deploy In Development') {
+      echo "Deploying container image"
+      sh "oc set image dc/${deploymentName} ${deploymentName}=docker-registry.default.svc:5000/${devNamespace}/${deploymentName}:${devTag} -n ${devNamespace}"
+      
+      sh "oc delete configmap ${deploymentName}-config --ignore-not-found=true -n ${devNamespace}"
+      sh "oc create configmap ${deploymentName}-config --from-literal=APPNAME='ParksMap (Dev)' -n ${devNamespace}"
+      sh "oc set env dc/${deploymentName} --from=configmap/${deploymentName}-config -n ${devNamespace}" 
+
+      openshiftDeploy depCfg: "${deploymentName}", namespace: "${devNamespace}", verbose: 'false', waitTime: '20', waitUnit: 'min'
+      openshiftVerifyDeployment depCfg: "${deploymentName}", namespace: "${devNamespace}", replicaCount: '1', verbose: 'false', verifyReplicaCount: 'false', waitTime: '20', waitUnit: 'min'
+      openshiftVerifyService namespace: "${devNamespace}", svcName: "${deploymentName}", verbose: 'false'
+    }
+
+    stage('Run Integration Tests') {
+      echo "Wait 60 seconds"
+      sleep 60
+
+      echo "Integration Tests"
+      sh "curl ${serviceUrl}${healthCheckEndpoint} | grep -q 'OK'"
+    }
+
+    stage('Copy Image') {
+      echo "Copying image to Nexus Docker Registry"
+      sh "skopeo copy --src-tls-verify=false --dest-tls-verify=false --src-creds openshift:\$(oc whoami -t) --dest-creds admin:admin123 docker://docker-registry.default.svc.cluster.local:5000/${devNamespace}/${deploymentName}:${devTag} docker://nexus-registry-${GUID}-nexus.apps.${CLUSTER}/${deploymentName}:${devTag}"
+      openshiftTag alias: 'false', destStream: "${deploymentName}", destTag: prodTag, destinationNamespace: "${devNamespace}", namespace: "${devNamespace}", srcStream: "${deploymentName}", srcTag: devTag, verbose: 'false'
+    }
+
+    // Blue/Green Deployment 
+    def destApp = "${deploymentName}-green"
+    def configmap = "${deploymentName}-config"
+    def destcfgMap = "Green"
+    def activeApp = ""
+
+     stage('Blue/Green Deployment') {
+      echo "Deploying Blue/Green Production"
+      activeApp = sh(returnStdout: true, script: "oc get route ${deploymentName} -n ${devNamespace} -o jsonpath='{ .spec.to.name }'").trim()
+      
+      if (activeApp == "${deploymentName}-green") {
+        destApp = "${deploymentName}-blue"
+        destcfgMap = "Blue"
+      }
+      
+      echo "Active Application:      " + activeApp
+      echo "Destination Application: " + destApp
+      echo "Config Map to be used:   " + destcfgMap
+
+      sh "oc set image dc/${destApp} ${destApp}=docker-registry.default.svc:5000/${devNamespace}/${deploymentName}:${prodTag} -n ${prodNamespace}"              
+      
+      sh "oc delete configmap ${configmap} -n ${prodNamespace} --ignore-not-found=true"
+      sh "oc create configmap ${configmap} --from-literal=APPNAME='ParksMap (${destcfgMap})' -n ${prodNamespace}"
+      sh "oc set env dc/${destApp} --from=configmap/${configmap} -n ${prodNamespace}"
+      
+      sh "oc expose dc/${destApp} --port 8080 -n ${prodNamespace}" 
+
+      openshiftDeploy depCfg: destApp, namespace: "${prodNamespace}", verbose: 'false', waitTime: '20', waitUnit: 'min'
+      openshiftVerifyDeployment depCfg: destApp, namespace: "${prodNamespace}", replicaCount: '1', verbose: 'false', verifyReplicaCount: 'true', waitTime: '20', waitUnit: 'min'
+      openshiftVerifyService namespace: "${prodNamespace}", svcName: destApp, verbose: 'false'
+    }
+
+    stage('Change route to new Version') {
+      echo "Changing Production application to ${destApp}..."
+      sh "oc patch route ${deploymentName} -n ${prodNamespace} -p '{\"spec\":{\"to\":{\"name\":\"" + destApp + "\"}}}'"
+      sh "oc delete svc ${activeApp} -n ${prodNamespace}"
+    }    
+ 
   }
 }
 
