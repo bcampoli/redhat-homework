@@ -117,11 +117,11 @@ podTemplate(
 
       sh "oc set image dc/${destApp} ${destApp}=docker-registry.default.svc:5000/${devNamespace}/${deploymentName}:${prodTag} -n ${prodNamespace}"              
       
-      sh "oc delete configmap ${configmap} -n ${prodNamespace} --ignore-not-found=true"
-      sh "oc create configmap ${configmap} --from-literal=APPNAME='ParksMap (${destcfgMap})' -n ${prodNamespace}"
-      sh "oc set env dc/${destApp} --from=configmap/${configmap} -n ${prodNamespace}"
+      sh "oc delete configmap parksmap-config -n ${GUID}-parks-prod --ignore-not-found=true"
+      sh "oc create configmap parksmap-config --from-literal=APPNAME='ParksMap (${destcfgMap})' -n ${GUID}-parks-prod"
+      sh "oc set env dc/${destApp} --from=configmap/parksmap-config -n ${GUID}-parks-prod"
       
-      sh "oc expose dc/${destApp} --port 8080 -n ${prodNamespace}" 
+      sh "oc expose dc/${destApp} --port 8080 -n ${GUID}-parks-prod" 
 
       openshiftDeploy depCfg: destApp, namespace: "${prodNamespace}", verbose: 'false', waitTime: '20', waitUnit: 'min'
       openshiftVerifyDeployment depCfg: destApp, namespace: "${prodNamespace}", replicaCount: '1', verbose: 'false', verifyReplicaCount: 'true', waitTime: '20', waitUnit: 'min'

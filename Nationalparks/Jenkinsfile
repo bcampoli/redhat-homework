@@ -127,20 +127,23 @@ podTemplate(
       
       sh "oc set image dc/${destApp} ${destApp}=docker-registry.default.svc:5000/${devNamespace}/${deploymentName}:${prodTag} -n ${prodNamespace}"
       
-      sh "oc delete configmap ${configmap} -n ${prodNamespace} --ignore-not-found=true"
+      sh "oc delete configmap nationalparks-config -n ${GUID}-parks-prod --ignore-not-found=true"
       
-      sh "oc create configmap ${configmap} --from-literal=APPNAME='National Parks (${destcfgMap})' \
-                --from-literal=DB_HOST=mongodb \
-                --from-literal=DB_PORT=27017 \
-                --from-literal=DB_USERNAME=mongodb \
-                --from-literal=DB_PASSWORD=mongodb \
-                --from-literal=DB_NAME=parks \
-                --from-literal=DB_REPLICASET=rs0 \
-                -n ${prodNamespace}"
+      sh "oc create configmap nationalparks-config \
+                    --from-literal=APPNAME='National Parks (${destcfgMap})' \
+                    --from-literal=DB_HOST=mongodb \
+                    --from-literal=DB_NAME=parks \
+                    --from-literal=DB_PASSWORD=mongodb \
+                    --from-literal=DB_PORT=27017 \
+                    --from-literal=DB_USERNAME=mongodb \
+                    --from-literal=DB_REPLICASET=rs0 \
+                    -n ${GUID}-parks-prod"
       
-      sh "oc set env dc/${destApp} --from=configmap/${prodNamespace} -n ${prodNamespace}"
+      sh "oc set env dc/${destApp} --from=configmap/nationalparks-config -n ${GUID}-parks-prod"
       
-      sh "oc expose dc/${destApp} --port 8080 -n ${prodNamespace}" 
+      sh "oc expose dc/${destApp} --port 8080 -n ${GUID}-parks-prod" 
+
+      
       
       openshiftDeploy depCfg: destApp, namespace: "${prodNamespace}", verbose: 'false', waitTime: '', waitUnit: 'sec'
       openshiftVerifyDeployment depCfg: destApp, namespace: "${prodNamespace}", replicaCount: '1', verbose: 'false', verifyReplicaCount: 'true', waitTime: '', waitUnit: 'sec'
