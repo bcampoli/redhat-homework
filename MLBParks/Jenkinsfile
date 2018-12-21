@@ -65,9 +65,13 @@ podTemplate(
     }
 
     stage('Build container image') {
-    echo "Building container image ${appname}:0.0-0"
-    sh "oc start-build ${deploymentName} --follow --from-file=${artifactPath} -n ${devNamespace}"
-    openshiftTag alias: "false", destStream: "${deploymentName}", destTag: devTag, destinationNamespace: "${devNamespace}", namespace: "${devNamespace}", srcStream: "${deploymentName}", srcTag: 'latest', verbose: 'false'
+      activeApp = sh(returnStdout: true, script: "oc get route ${deploymentName} -n ${prodNamespace} -o jsonpath='{ .spec.to.name }'").trim()
+      
+      if (activeApp == "${deploymentName}-blue") {
+        echo "Building container image ${appname}:0.0-0"
+        sh "oc start-build ${deploymentName} --follow --from-file=${artifactPath} -n ${devNamespace}"
+        openshiftTag alias: "false", destStream: "${deploymentName}", destTag: devTag, destinationNamespace: "${devNamespace}", namespace: "${devNamespace}", srcStream: "${deploymentName}", srcTag: 'latest', verbose: 'false'
+      }
     }
 
     stage('Deploy In Development') {
